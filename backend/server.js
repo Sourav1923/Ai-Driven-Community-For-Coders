@@ -70,13 +70,13 @@ io.on('connection', socket => {
 
         const message = data.message;
 
-        const aiIsPresentInMessage = message.includes('@ai');
+        const aiIsPresentInMessage = message.includes('@SouravAi');
         socket.broadcast.to(socket.roomId).emit('project-message', data)
 
         if (aiIsPresentInMessage) {
 
 
-            const prompt = message.replace('@ai', '');
+            const prompt = message.replace('@SouravAi', '');
 
             const result = await generateResult(prompt);
 
