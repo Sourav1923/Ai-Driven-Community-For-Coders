@@ -6,6 +6,7 @@ import { initializeSocket, receiveMessage, sendMessage } from '../config/socket'
 import Markdown from 'markdown-to-jsx';
 import hljs from 'highlight.js';
 import { getWebContainer } from '../config/webcontainer';
+import Terminal from './Terminal'; // Import the Terminal component
 
 function SyntaxHighlightedCode(props) {
     const ref = useRef(null);
@@ -38,6 +39,8 @@ const Project = () => {
     const [iframeUrl, setIframeUrl] = useState(null);
     const [runProcess, setRunProcess] = useState(null);
     const [darkMode, setDarkMode] = useState(true);
+    const [terminalLogs, setTerminalLogs] = useState([]); // State for terminal logs
+    const [isTerminalOpen, setIsTerminalOpen] = useState(false); // State to toggle terminal visibility
 
     const handleUserClick = (id) => {
         setSelectedUserId((prevSelectedUserId) => {
@@ -239,21 +242,21 @@ const Project = () => {
             <section className="right bg-gradient-to-b from-gray-800 to-gray-900 flex-grow h-full flex">
                 {/* Explorer */}
                 <div className="explorer h-full max-w-64 min-w-52 bg-gray-900 shadow-lg">
-    <div className="file-tree w-full p-2 space-y-2"> {/* Added space-y-2 for vertical gaps */}
-        {Object.keys(fileTree).map((file, index) => (
-            <button
-                key={index}
-                onClick={() => {
-                    setCurrentFile(file);
-                    setOpenFiles([...new Set([...openFiles, file])]);
-                }}
-                className="tree-element cursor-pointer p-2 px-4 flex items-center gap-2 bg-gray-800 w-full hover:bg-gray-700 rounded-lg transition-colors"
-            >
-                <p className='font-semibold text-lg text-gray-100'>{file}</p>
-            </button>
-        ))}
-    </div>
-</div>
+                    <div className="file-tree w-full p-2 space-y-2">
+                        {Object.keys(fileTree).map((file, index) => (
+                            <button
+                                key={index}
+                                onClick={() => {
+                                    setCurrentFile(file);
+                                    setOpenFiles([...new Set([...openFiles, file])]);
+                                }}
+                                className="tree-element cursor-pointer p-2 px-4 flex items-center gap-2 bg-gray-800 w-full hover:bg-gray-700 rounded-lg transition-colors"
+                            >
+                                <p className='font-semibold text-lg text-gray-100'>{file}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
 
                 {/* Code Editor */}
                 <div className="code-editor flex flex-col flex-grow h-full shrink">
@@ -269,18 +272,19 @@ const Project = () => {
                                 </button>
                             ))}
                         </div>
-                        
-                        
+
                         <div className="actions flex gap-2 justify-end">
                             <a href="http://localhost:3002/" className='p-2 px-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors'>Code Review</a>
                             <button
                                 onClick={async () => {
+                                    setIsTerminalOpen(true); // Open the terminal
+                                    setTerminalLogs([]); // Clear previous logs
                                     await webContainer.mount(fileTree);
                                     const installProcess = await webContainer.spawn("npm", ["install"]);
                                     installProcess.output.pipeTo(
                                         new WritableStream({
                                             write(chunk) {
-                                                console.log(chunk);
+                                                setTerminalLogs((prevLogs) => [...prevLogs, chunk]);
                                             },
                                         })
                                     );
@@ -291,13 +295,14 @@ const Project = () => {
                                     tempRunProcess.output.pipeTo(
                                         new WritableStream({
                                             write(chunk) {
-                                                console.log(chunk);
+                                                setTerminalLogs((prevLogs) => [...prevLogs, chunk]);
                                             },
                                         })
                                     );
                                     setRunProcess(tempRunProcess);
                                     webContainer.on('server-ready', (port, url) => {
-                                        console.log(port, url);
+                                        setTerminalLogs((prevLogs) => [...prevLogs, `Server ready on port ${port}`]);
+                                        setTerminalLogs((prevLogs) => [...prevLogs, `URL: ${url}`]);
                                         setIframeUrl(url);
                                     });
                                 }}
@@ -356,6 +361,20 @@ const Project = () => {
                     </div>
                 )}
             </section>
+
+            {/* Terminal Popup */}
+            <div className={`fixed bottom-0 left-0 right-0 bg-gray-900 text-white transition-transform duration-300 ${isTerminalOpen ? 'translate-y-0' : 'translate-y-full'}`}>
+                <div className="flex justify-between items-center p-2 bg-gray-800">
+                    <h2 className="text-lg font-semibold">Terminal</h2>
+                    <button
+                        onClick={() => setIsTerminalOpen(false)}
+                        className="p-2 text-gray-100 hover:text-blue-400 transition-colors"
+                    >
+                        <i className="ri-close-fill"></i>
+                    </button>
+                </div>
+                <Terminal logs={terminalLogs} className="h-30 overflow-y-auto" />
+            </div>
 
             {/* Modal */}
             {isModalOpen && (
