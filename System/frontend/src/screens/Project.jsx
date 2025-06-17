@@ -151,6 +151,14 @@ const Project = () => {
         messageBox.current.scrollTop = messageBox.current.scrollHeight;
     }
 
+    function sendToNext(event){
+        if(event.key==='Enter'){
+            send();
+        }
+    }
+
+    
+
     return (
         <main className={`h-screen w-screen flex ${darkMode ? 'dark' : ''}`}>
             {/* Left Section - Chat Panel */}
@@ -201,6 +209,8 @@ const Project = () => {
                             className='p-2 px-4 border-none outline-none flex-grow bg-gray-700 text-gray-100 placeholder-gray-400 rounded-l-lg'
                             type="text"
                             placeholder='Enter message'
+                            onKeyDown={sendToNext}
+                            
                         />
                         <button
                             onClick={send}
