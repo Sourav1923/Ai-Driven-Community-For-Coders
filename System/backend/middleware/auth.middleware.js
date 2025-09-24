@@ -29,3 +29,6 @@ export const authUser = async (req, res, next) => {
         res.status(401).send({ error: 'Unauthorized User' });
     }
 }
+
+// Export authenticateToken as an alias for authUser
+export const authenticateToken = authUser;
