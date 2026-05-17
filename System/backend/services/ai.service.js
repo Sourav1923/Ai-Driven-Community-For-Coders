@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY);
 const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-3-flash-preview",
     generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.4,
@@ -256,11 +256,51 @@ When creating React applications, ALWAYS follow this structure:
     `
 });
 
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 5000; // 5 seconds
+
+/**
+ * Calls the Gemini API with automatic retry + exponential backoff for 429 errors.
+ */
+async function callWithRetry(prompt, retries = MAX_RETRIES) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const result = await model.generateContent(prompt);
+            return await result.response.text();
+        } catch (error) {
+            const is429 = error?.status === 429;
+
+            if (is429 && attempt < retries) {
+                // Extract retry delay from error if available, otherwise use exponential backoff
+                let delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
+
+                const retryInfo = error?.errorDetails?.find(
+                    d => d['@type']?.includes('RetryInfo')
+                );
+                if (retryInfo?.retryDelay) {
+                    const seconds = parseFloat(retryInfo.retryDelay);
+                    if (!isNaN(seconds)) {
+                        delayMs = seconds * 1000;
+                    }
+                }
+
+                console.log(
+                    `Rate limited (429). Retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt + 1}/${retries})...`
+                );
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                continue;
+            }
+
+            // Not a 429 or out of retries – rethrow
+            throw error;
+        }
+    }
+}
+
 export const generateResult = async (prompt) => {
     try {
         console.log('AI prompt:', prompt);
-        const result = await model.generateContent(prompt);
-        const response = await result.response.text();
+        const response = await callWithRetry(prompt);
         console.log('AI raw response:', response);
         
         // Try to parse the response as JSON
@@ -277,8 +317,32 @@ export const generateResult = async (prompt) => {
         }
     } catch (error) {
         console.error('AI generation error:', error);
+        const msg = String(error?.message || "");
+        const is429 = error?.status === 429;
+
+        if (msg) {
+            if (msg.toLowerCase().includes("api key")) {
+                return JSON.stringify({
+                    text: "AI key is invalid. Please update configuration.",
+                    errorCode: "INVALID_API_KEY"
+                });
+            }
+            if (is429 || msg.toLowerCase().includes("quota")) {
+                return JSON.stringify({
+                    text: "AI quota exceeded. The free-tier daily limit has been reached. Please try again later or upgrade to a paid plan at https://ai.google.dev.",
+                    errorCode: "QUOTA_EXCEEDED"
+                });
+            }
+            if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch")) {
+                return JSON.stringify({
+                    text: "Network error contacting AI service.",
+                    errorCode: "NETWORK_ERROR"
+                });
+            }
+        }
         return JSON.stringify({
-            text: 'Sorry, I encountered an error processing your request.'
+            text: "Sorry, I encountered an error processing your request.",
+            errorCode: "GENERATION_ERROR"
         });
     }
 }
